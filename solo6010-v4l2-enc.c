@@ -181,7 +181,13 @@ struct vop_header {
 	/* VE_STATUS10 */
 	u32 mpeg_size_alt:20, nop3:12;
 
-	u32 end_nops[5];
+	/* VE_STATUS11 */
+	u32 nop4;
+
+	/* VE_STATUS12 */
+	u32 jpeg_qp;
+
+	u32 end_nops[3];
 } __attribute__((packed));
 
 struct solo_enc_buf {
@@ -320,6 +326,8 @@ static void solo_update_mode(struct solo_enc_dev *solo_enc)
 	vop[SOF0_START + 6] = 0xff & solo_enc->height;
 	vop[SOF0_START + 7] = 0xff & (solo_enc->width >> 8);
 	vop[SOF0_START + 8] = 0xff & solo_enc->width;
+
+	memcpy(vop + DQT_START, JPEG_DQT[solo_g_jpeg_qp(solo_dev, solo_enc->ch)], DQT_LEN);
 }
 
 /* MUST be called with solo_enc->enable_lock held */

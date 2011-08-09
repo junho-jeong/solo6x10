@@ -169,13 +169,71 @@ int solo_osd_print(struct solo_enc_dev *solo_enc)
 	return 0;
 }
 
+/* qp : 0 ~ 3 */
+void solo_s_jpeg_qp(struct solo6010_dev *solo_dev, int channel, int qp)
+{
+	int shift;
+
+	if (solo_dev->type == SOLO_DEV_6010)
+		return;
+
+	if((channel > 31) || (qp > 3))
+		return;
+
+	spin_lock(&solo_dev->jpeg_qp_lock);
+	if(channel < 16)
+	{
+		shift = channel * 2;
+		solo_dev->jpeg_qp[0] &= ~(3<<shift);
+		solo_dev->jpeg_qp[0] |= (qp & 3)<<shift;
+		solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_CH_L, solo_dev->jpeg_qp[0]);
+	} else {
+		shift = (channel - 16) * 2;
+		solo_dev->jpeg_qp[1] &= ~(3<<shift);
+		solo_dev->jpeg_qp[1] |= (qp & 3)<<shift;
+		solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_CH_H, solo_dev->jpeg_qp[1]);
+	}
+	spin_unlock(&solo_dev->jpeg_qp_lock);
+}
+
+int solo_g_jpeg_qp(struct solo6010_dev *solo_dev, int channel)
+{
+	int shift;
+	int qp;
+
+	if (solo_dev->type == SOLO_DEV_6010)
+		return 2;
+	
+	if(channel > 31)
+		return 0;
+
+	if(channel < 16)
+	{
+		shift = channel * 2;
+		qp = (solo_dev->jpeg_qp[0]>>shift) & 3;
+	} else {
+		shift = (channel - 16) * 2;
+		qp = (solo_dev->jpeg_qp[1]>>shift) & 3;
+	}
+
+	return qp;
+}
+
 static void solo_jpeg_config(struct solo6010_dev *solo_dev)
 {
-	solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_TBL,
-		       (2 << 24) | (2 << 16) | (2 << 8) | 2);
+	if (solo_dev->type == SOLO_DEV_6010) {
+		solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_TBL,
+			(2 << 24) | (2 << 16) | (2 << 8) | 2);
+	} else {
+		solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_TBL,
+			(4 << 24) | (3 << 16) | (2 << 8) | 1);
+	}
 
-	solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_CH_L, 0);
-	solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_CH_H, 0);
+	solo_dev->jpeg_qp[0] = 0;
+	solo_dev->jpeg_qp[1] = 0;
+	spin_lock_init(&solo_dev->jpeg_qp_lock);
+	solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_CH_L, solo_dev->jpeg_qp[0]);
+	solo_reg_write(solo_dev, SOLO_VE_JPEG_QP_CH_H, solo_dev->jpeg_qp[1]);
 	solo_reg_write(solo_dev, SOLO_VE_JPEG_CFG,
 		(SOLO_JPEG_EXT_SIZE(solo_dev) & 0xffff0000) |
 		((SOLO_JPEG_EXT_ADDR(solo_dev) >> 16) & 0x0000ffff));
